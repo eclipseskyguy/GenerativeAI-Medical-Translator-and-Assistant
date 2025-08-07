@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+python-multipart
+googletrans==3.1.0a0
+gTTS
+Jinja2
+google-generativeai

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Healthcare Translation</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #121212; color: #e0e0e0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; margin: 0; padding-top: 2rem; }
+        .container { background-color: #1e1e1e; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); width: 90%; max-width: 700px; }
+        h1 { color: #bb86fc; text-align: center; margin-bottom: 2rem; }
+        .lang-selector { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+        .form-group { flex-grow: 1; }
+        select, textarea { width: 100%; padding: 0.8rem; border-radius: 6px; border: 1px solid #333; background-color: #2c2c2c; color: #e0e0e0; font-size: 1rem; box-sizing: border-box; }
+        textarea { resize: vertical; min-height: 100px; }
+        .buttons { display: flex; gap: 1rem; margin-top: 1.5rem; }
+        button { padding: 1rem; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+        #speakBtn { flex-grow: 1; background-color: #03dac6; color: #121212; }
+        #speakBtn.listening { background-color: #cf6679; }
+        #translateBtn { flex-grow: 1; background-color: #bb86fc; color: #121212; }
+        #swapBtn { background: none; border: 1px solid #bb86fc; color: #bb86fc; font-size: 1.5rem; padding: 0.5rem 1rem; margin: 0 1rem; }
+        button:disabled { background-color: #444; cursor: not-allowed; }
+        #historyContainer { margin-top: 2rem; max-height: 40vh; overflow-y: auto; padding-right: 1rem; }
+        .history-item { margin-bottom: 1.5rem; background-color: #2c2c2c; padding: 1rem; border-radius: 6px; }
+        .history-item p { margin: 0.5rem 0; word-wrap: break-word; }
+        .history-item .original { color: #a0a0a0; font-size: 0.9em; }
+        .history-item .translated { font-size: 1.1em; }
+        .history-item .actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; align-items: center; }
+        .actions button { font-size: 0.8rem; padding: 0.4rem 0.8rem; }
+        .actions .summarizeBtn { background-color: #3f51b5; color: white; }
+        .loader { text-align: center; display: none; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Healthcare Translation</h1>
+        <div class="lang-selector">
+            <div class="form-group"><label for="inputLang">Your Language</label><select id="inputLang"><option value="en">English</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="hi">Hindi</option><option value="ta">Tamil</option></select></div>
+            <button id="swapBtn" title="Swap Languages">⇄</button>
+            <div class="form-group"><label for="outputLang">Patient's Language</label><select id="outputLang"><option value="ta">Tamil</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="hi">Hindi</option><option value="en">English</option></select></div>
+        </div>
+        <div class="form-group">
+            <label for="inputText">Text to Translate</label>
+            <textarea id="inputText" placeholder="Enter text or use the microphone..."></textarea>
+        </div>
+        <div class="buttons">
+            <button id="speakBtn">Start Speaking</button>
+            <button id="translateBtn">Translate & Speak</button>
+        </div>
+        <div class="loader" id="loader">Processing...</div>
+        <div id="historyContainer"></div>
+        <audio id="audioPlayer" style="display:none;"></audio>
+    </div>
+
+    <script>
+        const speakBtn = document.getElementById('speakBtn');
+        const translateBtn = document.getElementById('translateBtn');
+        const swapBtn = document.getElementById('swapBtn');
+        const inputText = document.getElementById('inputText');
+        const inputLang = document.getElementById('inputLang');
+        const outputLang = document.getElementById('outputLang');
+        const historyContainer = document.getElementById('historyContainer');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const loader = document.getElementById('loader');
+
+        swapBtn.addEventListener('click', () => { const temp = inputLang.value; inputLang.value = outputLang.value; outputLang.value = temp; });
+        
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true; recognition.interimResults = true;
+            speakBtn.addEventListener('click', () => {
+                if (speakBtn.classList.contains('listening')) { recognition.stop(); } else { inputText.value = ''; recognition.lang = inputLang.value; recognition.start(); }
+            });
+            recognition.onstart = () => { speakBtn.textContent = 'Stop Recording'; speakBtn.classList.add('listening'); };
+            recognition.onend = () => { speakBtn.textContent = 'Start Speaking'; speakBtn.classList.remove('listening'); };
+            recognition.onresult = (e) => { inputText.value = Array.from(e.results).map(r => r[0]).map(r => r.transcript).join(''); };
+            recognition.onerror = (e) => { console.error("Speech error:", e.error); alert(`Speech error: ${e.error}`); };
+        } else { speakBtn.disabled = true; speakBtn.textContent = 'Mic Not Supported'; }
+
+        translateBtn.addEventListener('click', async () => {
+            const textToTranslate = inputText.value;
+            if (!textToTranslate) { alert('Please enter text first.'); return; }
+            loader.style.display = 'block'; translateBtn.disabled = true;
+            try {
+                const translateFormData = new FormData();
+                translateFormData.append('text', textToTranslate);
+                translateFormData.append('input_lang_code', inputLang.value);
+                translateFormData.append('output_lang_code', outputLang.value);
+                const translateResponse = await fetch('/translate/', { method: 'POST', body: translateFormData });
+                if (!translateResponse.ok) throw new Error('Translation failed');
+                const translateData = await translateResponse.json();
+                addHistoryItem(translateData.original_text, translateData.translated_text);
+                inputText.value = '';
+                const ttsResponse = await fetch('/text-to-speech/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: translateData.translated_text, lang_code: translateData.output_lang_code })
+                });
+                if (!ttsResponse.ok) throw new Error('TTS failed');
+                const audioBlob = await ttsResponse.blob();
+                audioPlayer.src = URL.createObjectURL(audioBlob);
+                audioPlayer.play();
+            } catch (error) { console.error('Processing error:', error); alert('An error occurred.'); } finally { loader.style.display = 'none'; translateBtn.disabled = false; }
+        });
+        
+        historyContainer.addEventListener('click', async (event) => {
+            if (event.target.classList.contains('summarizeBtn')) {
+                const textToSummarize = event.target.dataset.text;
+                event.target.textContent = '...'; event.target.disabled = true;
+                try {
+                    const response = await fetch('/summarize/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: textToSummarize })
+                    });
+                    if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.detail || 'Summarization failed'); }
+                    const data = await response.json();
+                    alert(`AI Summary:\n\n${data.summary}`);
+                } catch (error) { console.error('Summarization error:', error); alert(`Summarization failed: ${error.message}`); } finally { event.target.textContent = 'Summarize'; event.target.disabled = false; }
+            }
+        });
+
+        function addHistoryItem(original, translated) {
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerHTML = `
+                <p class="original"><strong>You:</strong> ${original}</p>
+                <p class="translated"><strong>Translation:</strong> ${translated}</p>
+                <div class="actions">
+                    <button class="summarizeBtn" data-text="${translated}">Summarize</button>
+                </div>
+            `;
+            historyContainer.prepend(item);
+        }
+    </script>
+</body>
+</html>
