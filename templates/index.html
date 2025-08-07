@@ -63,8 +63,9 @@
         const el = Object.entries(allSelectors).reduce((acc, [key, id]) => ({ ...acc, [key]: document.getElementById(id) }), {});
 
         el.swapBtn.addEventListener('click', () => { const temp = el.inputLang.value; el.inputLang.value = el.outputLang.value; el.outputLang.value = temp; });
-        el.clearHistoryBtn.addEventListener('click', () => { el.historyContainer.innerHTML = ''; });
-        
+        el.clearHistoryBtn.addEventListener('click', () => {
+    el.historyContainer.innerHTML = '';
+    el.audioPlayer.src = ''; });
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             const recognition = new SpeechRecognition();
