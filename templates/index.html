@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Healthcare Translation</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #121212; color: #e0e0e0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; margin: 0; padding-top: 2rem; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; }
+        .main-container { display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding-top: 2rem; }
         .container { background-color: #1e1e1e; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); width: 90%; max-width: 700px; }
         h1 { color: #bb86fc; text-align: center; margin-bottom: 1rem; }
         .header-actions { text-align: center; margin-bottom: 2rem; }
@@ -32,111 +33,109 @@
         .actions .explainBtn { background-color: #4CAF50; color: white; }
         .loader { text-align: center; display: none; margin-top: 1rem; }
         audio { width: 100%; margin-top: 1rem; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: #2c2c2c; padding: 2rem; border-radius: 8px; max-width: 500px; width: 80%; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .modal-content h3 { margin-top: 0; color: #bb86fc; }
+        .modal-content .lang-section { margin-bottom: 1rem; }
+        .modal-content .lang-label { font-weight: bold; color: #03dac6; }
+        .modal-close { float: right; font-size: 1.5rem; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Healthcare Translation</h1>
-        <div class="header-actions">
-            <button id="clearHistoryBtn">Clear History</button>
+    <div class="main-container">
+        <div class="container">
+            <h1>Healthcare Translation</h1>
+            <div class="header-actions"><button id="clearHistoryBtn">Clear History</button></div>
+            <div class="lang-selector">
+                <div class="form-group"><label for="inputLang">Your Language</label><select id="inputLang"><option value="en">English</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="hi">Hindi</option><option value="ta">Tamil</option></select></div>
+                <button id="swapBtn" title="Swap Languages">⇄</button>
+                <div class="form-group"><label for="outputLang">Patient's Language</label><select id="outputLang"><option value="ta">Tamil</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="hi">Hindi</option><option value="en">English</option></select></div>
+            </div>
+            <div class="form-group"><label for="inputText">Text to Translate</label><textarea id="inputText" placeholder="Enter text or use the microphone..."></textarea></div>
+            <div class="buttons"><button id="speakBtn">Start Speaking</button><button id="translateBtn">Translate & Speak</button></div>
+            <div class="loader" id="loader">Processing...</div>
+            <div id="historyContainer"></div>
+            <audio id="audioPlayer" controls></audio>
         </div>
-        <div class="lang-selector">
-            <div class="form-group"><label for="inputLang">Your Language</label><select id="inputLang"><option value="en">English</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="hi">Hindi</option><option value="ta">Tamil</option></select></div>
-            <button id="swapBtn" title="Swap Languages">⇄</button>
-            <div class="form-group"><label for="outputLang">Patient's Language</label><select id="outputLang"><option value="ta">Tamil</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="hi">Hindi</option><option value="en">English</option></select></div>
+    </div>
+    <div id="aiModal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="modal-close" id="modalCloseBtn">&times;</span>
+            <h3 id="modalTitle">AI Insight</h3>
+            <div id="modalBody"></div>
         </div>
-        <div class="form-group">
-            <label for="inputText">Text to Translate</label>
-            <textarea id="inputText" placeholder="Enter text or use the microphone..."></textarea>
-        </div>
-        <div class="buttons">
-            <button id="speakBtn">Start Speaking</button>
-            <button id="translateBtn">Translate & Speak</button>
-        </div>
-        <div class="loader" id="loader">Processing...</div>
-        <div id="historyContainer"></div>
-        <audio id="audioPlayer" controls></audio>
     </div>
 
     <script>
-        const allSelectors = { speakBtn: 'speakBtn', translateBtn: 'translateBtn', swapBtn: 'swapBtn', inputText: 'inputText', inputLang: 'inputLang', outputLang: 'outputLang', historyContainer: 'historyContainer', audioPlayer: 'audioPlayer', loader: 'loader', clearHistoryBtn: 'clearHistoryBtn' };
-        const el = Object.entries(allSelectors).reduce((acc, [key, id]) => ({ ...acc, [key]: document.getElementById(id) }), {});
+        const el = {
+            speakBtn: document.getElementById('speakBtn'), translateBtn: document.getElementById('translateBtn'), swapBtn: document.getElementById('swapBtn'), inputText: document.getElementById('inputText'), inputLang: document.getElementById('inputLang'), outputLang: document.getElementById('outputLang'), historyContainer: document.getElementById('historyContainer'), audioPlayer: document.getElementById('audioPlayer'), loader: document.getElementById('loader'), clearHistoryBtn: document.getElementById('clearHistoryBtn'), aiModal: document.getElementById('aiModal'), modalCloseBtn: document.getElementById('modalCloseBtn'), modalTitle: document.getElementById('modalTitle'), modalBody: document.getElementById('modalBody')
+        };
 
         el.swapBtn.addEventListener('click', () => { const temp = el.inputLang.value; el.inputLang.value = el.outputLang.value; el.outputLang.value = temp; });
-        el.clearHistoryBtn.addEventListener('click', () => {
-    el.historyContainer.innerHTML = '';
-    el.audioPlayer.src = ''; });
+        el.clearHistoryBtn.addEventListener('click', () => { el.historyContainer.innerHTML = ''; el.audioPlayer.src = ''; });
+        el.modalCloseBtn.addEventListener('click', () => { el.aiModal.style.display = 'none'; });
+        el.aiModal.addEventListener('click', (e) => { if (e.target === el.aiModal) { el.aiModal.style.display = 'none'; } });
+
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
-            const recognition = new SpeechRecognition();
-            recognition.continuous = true; recognition.interimResults = true;
-            el.speakBtn.addEventListener('click', () => {
-                if (el.speakBtn.classList.contains('listening')) { recognition.stop(); } else { el.inputText.value = ''; recognition.lang = el.inputLang.value; recognition.start(); }
-            });
-            recognition.onstart = () => { el.speakBtn.textContent = 'Stop Recording'; el.speakBtn.classList.add('listening'); };
-            recognition.onend = () => { el.speakBtn.textContent = 'Start Speaking'; el.speakBtn.classList.remove('listening'); };
-            recognition.onresult = (e) => { el.inputText.value = Array.from(e.results).map(r => r[0]).map(r => r.transcript).join(''); };
-            recognition.onerror = (e) => { console.error("Speech error:", e.error); alert(`Speech error: ${e.error}`); };
+            const r = new SpeechRecognition(); r.continuous = true; r.interimResults = true;
+            el.speakBtn.addEventListener('click', () => { if (el.speakBtn.classList.contains('listening')) { r.stop(); } else { el.inputText.value = ''; r.lang = el.inputLang.value; r.start(); } });
+            r.onstart = () => { el.speakBtn.textContent = 'Stop Recording'; el.speakBtn.classList.add('listening'); };
+            r.onend = () => { el.speakBtn.textContent = 'Start Speaking'; el.speakBtn.classList.remove('listening'); };
+            r.onresult = (e) => { el.inputText.value = Array.from(e.results).map(res => res[0]).map(res => res.transcript).join(''); };
+            r.onerror = (e) => { console.error("Speech error:", e.error); alert(`Speech error: ${e.error}`); };
         } else { el.speakBtn.disabled = true; el.speakBtn.textContent = 'Mic Not Supported'; }
 
         el.translateBtn.addEventListener('click', async () => {
-            const textToTranslate = el.inputText.value;
-            if (!textToTranslate) { alert('Please enter text first.'); return; }
+            if (!el.inputText.value) { alert('Please enter text first.'); return; }
             el.loader.style.display = 'block'; el.translateBtn.disabled = true;
             try {
-                const translateFormData = new FormData();
-                translateFormData.append('text', textToTranslate);
-                translateFormData.append('input_lang_code', el.inputLang.value);
-                translateFormData.append('output_lang_code', el.outputLang.value);
-                const translateResponse = await fetch('/translate/', { method: 'POST', body: translateFormData });
-                if (!translateResponse.ok) throw new Error('Translation failed');
-                const translateData = await translateResponse.json();
-                addHistoryItem(translateData.original_text, translateData.translated_text);
+                const fd = new FormData(); fd.append('text', el.inputText.value); fd.append('input_lang_code', el.inputLang.value); fd.append('output_lang_code', el.outputLang.value);
+                const res = await fetch('/translate/', { method: 'POST', body: fd });
+                if (!res.ok) throw new Error('Translation failed');
+                const data = await res.json();
+                addHistoryItem(data.original_text, data.translated_text, data.original_lang_code, data.output_lang_code);
                 el.inputText.value = '';
-                const ttsResponse = await fetch('/text-to-speech/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: translateData.translated_text, lang_code: translateData.output_lang_code })
-                });
-                if (!ttsResponse.ok) throw new Error('TTS failed');
-                const audioBlob = await ttsResponse.blob();
-                const audioUrl = URL.createObjectURL(audioBlob);
-                el.audioPlayer.src = audioUrl;
-                try { await el.audioPlayer.play(); } catch(err) { console.error("Autoplay failed:", err); }
-            } catch (error) { console.error('Processing error:', error); alert('An error occurred.'); } finally { el.loader.style.display = 'none'; el.translateBtn.disabled = false; }
+                const ttsRes = await fetch('/text-to-speech/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: data.translated_text, lang_code: data.output_lang_code }) });
+                if (ttsRes.ok) { const blob = await ttsRes.blob(); el.audioPlayer.src = URL.createObjectURL(blob); try { await el.audioPlayer.play(); } catch (err) { console.error("Autoplay failed:", err); } }
+            } catch (err) { console.error('Processing error:', err); alert('An error occurred.'); } finally { el.loader.style.display = 'none'; el.translateBtn.disabled = false; }
         });
-        
+
         el.historyContainer.addEventListener('click', async (event) => {
-            const button = event.target;
-            const text = button.dataset.text;
-            if (!text) return;
-            let endpoint = '', alertTitle = '', resultKey = '';
-            if (button.classList.contains('summarizeBtn')) { endpoint = '/summarize/'; alertTitle = 'AI Summary'; resultKey = 'summary'; } 
-            else if (button.classList.contains('explainBtn')) { endpoint = '/explain-medication/'; alertTitle = 'AI Medication Explainer'; resultKey = 'explanation'; } 
+            const button = event.target; const text = button.dataset.text; if (!text) return;
+            const originalLang = button.dataset.originalLang; const targetLang = button.dataset.targetLang;
+            let endpoint = '', title = '', resKey1 = '', resKey2 = '';
+            if (button.classList.contains('summarizeBtn')) { endpoint = '/summarize/'; title = 'AI Summary'; resKey1 = 'summary_original_lang'; resKey2 = 'summary_target_lang'; } 
+            else if (button.classList.contains('explainBtn')) { endpoint = '/explain-medication/'; title = 'AI Medication Explainer'; resKey1 = 'explanation_original_lang'; resKey2 = 'explanation_target_lang'; } 
             else { return; }
             button.textContent = '...'; button.disabled = true;
             try {
-                const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }) });
-                if (!response.ok) { const err = await response.json(); throw new Error(err.detail); }
-                const data = await response.json();
-                alert(`${alertTitle}:\n\n${data[resultKey]}`);
-            } catch (error) { console.error('AI feature error:', error); alert(`Failed: ${error.message}`); } finally {
-                button.textContent = button.classList.contains('summarizeBtn') ? 'Summarize' : 'Explain Medication';
-                button.disabled = false;
-            }
+                const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, original_lang: originalLang, target_lang: targetLang }) });
+                if (!res.ok) { const err = await res.json(); throw new Error(err.detail); }
+                const data = await res.json();
+                showModal(title, data[resKey1], data[resKey2], originalLang, targetLang);
+            } catch (err) { console.error('AI feature error:', err); alert(`Failed: ${err.message}`); } finally { button.textContent = button.classList.contains('summarizeBtn') ? 'Summarize' : 'Explain Medication'; button.disabled = false; }
         });
 
-        function addHistoryItem(original, translated) {
-            const item = document.createElement('div');
-            item.className = 'history-item';
+        function addHistoryItem(original, translated, originalLang, targetLang) {
+            const item = document.createElement('div'); item.className = 'history-item';
             item.innerHTML = `
-                <p class="original"><strong>You:</strong> ${original}</p>
-                <p class="translated"><strong>Translation:</strong> ${translated}</p>
+                <p class="original"><strong>You (${originalLang}):</strong> ${original}</p>
+                <p class="translated"><strong>Translation (${targetLang}):</strong> ${translated}</p>
                 <div class="actions">
-                    <button class="summarizeBtn" data-text="${translated}">Summarize</button>
-                    <button class="explainBtn" data-text="${translated}">Explain Medication</button>
+                    <button class="summarizeBtn" data-text="${translated}" data-original-lang="${originalLang}" data-target-lang="${targetLang}">Summarize</button>
+                    <button class="explainBtn" data-text="${translated}" data-original-lang="${originalLang}" data-target-lang="${targetLang}">Explain Medication</button>
                 </div>`;
-            historyContainer.prepend(item);
+            el.historyContainer.prepend(item);
+        }
+
+        function showModal(title, content1, content2, lang1, lang2) {
+            el.modalTitle.textContent = title;
+            el.modalBody.innerHTML = `
+                <div class="lang-section"><p class="lang-label">${lang1.toUpperCase()}:</p><p>${content1}</p></div>
+                <div class="lang-section"><p class="lang-label">${lang2.toUpperCase()}:</p><p>${content2}</p></div>
+            `;
+            el.aiModal.style.display = 'flex';
         }
     </script>
 </body>
