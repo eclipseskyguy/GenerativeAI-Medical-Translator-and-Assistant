@@ -79,16 +79,12 @@ async def explain_medication(request: AIRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI model failed: {str(e)}")
 
-# --- UPDATED: SIGN LANGUAGE FEATURE ENDPOINT ---
 @app.post("/generate-sign-language/")
 async def generate_sign_language(request: APIRequest):
     video_urls = []
     try:
-        # NEW: First, translate the incoming text to English, regardless of its original language.
         translator = Translator()
         english_text = translator.translate(request.text, dest='en').text
-        
-        # Now, use the English text to search for signs.
         words = ''.join(c for c in english_text if c.isalnum() or c.isspace()).lower().split()
         
         async with httpx.AsyncClient() as client:
