@@ -5,3 +5,4 @@ googletrans==3.1.0a0
 gTTS
 Jinja2
 google-generativeai
+httpx
