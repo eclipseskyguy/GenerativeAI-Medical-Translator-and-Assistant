@@ -113,9 +113,8 @@
 
         el.historyContainer.addEventListener('click', async (event) => {
             const button = event.target;
-            const text = button.dataset.text;
             if (!button.dataset.action) return;
-
+            const text = button.dataset.text;
             const originalLang = button.dataset.originalLang;
             const targetLang = button.dataset.targetLang;
             const action = button.dataset.action;
@@ -141,32 +140,50 @@
             }
         });
 
+        // --- NEW: ROBUST SIGN LANGUAGE PLAYER ---
         async function playSignLanguage(text) {
             el.signLanguageContainer.style.display = 'flex';
-            el.signLanguageContainer.innerHTML = ''; // Clear previous
-            const videoEl = document.createElement('video');
-            videoEl.id = 'signLanguageVideo';
-            videoEl.autoplay = true;
-            videoEl.muted = true;
-            const wordEl = document.createElement('p');
-            wordEl.id = 'signLanguageWord';
-            el.signLanguageContainer.append(videoEl, wordEl);
-            
-            const res = await fetch('/generate-sign-language/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }) });
-            if (!res.ok) { el.signLanguageContainer.innerHTML = '<p>Could not fetch sign language data.</p>'; return; }
-            const data = await res.json();
-            
-            for (const sign of data.signs) {
-                wordEl.textContent = sign.word;
-                if (sign.url) {
-                    videoEl.src = sign.url;
-                    await videoEl.play();
-                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds per sign
-                } else {
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Pause for unfound words
+            el.signLanguageContainer.innerHTML = `<div class="loader">Loading sign videos...</div>`;
+            try {
+                const res = await fetch('/generate-sign-language/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }) });
+                if (!res.ok) throw new Error('Could not fetch sign language data.');
+                const data = await res.json();
+                
+                el.signLanguageContainer.innerHTML = ''; // Clear loader
+                const videoEl = document.createElement('video');
+                videoEl.id = 'signLanguageVideo';
+                videoEl.muted = true; // Autoplay works best when muted
+                const wordEl = document.createElement('p');
+                wordEl.id = 'signLanguageWord';
+                el.signLanguageContainer.append(videoEl, wordEl);
+
+                for (const sign of data.signs) {
+                    wordEl.textContent = sign.word;
+                    if (sign.url) {
+                        videoEl.src = sign.url;
+                        videoEl.load();
+                        try {
+                            await videoEl.play();
+                            await new Promise(resolve => {
+                                const onEnded = () => {
+                                    videoEl.removeEventListener('ended', onEnded);
+                                    resolve();
+                                };
+                                videoEl.addEventListener('ended', onEnded);
+                            });
+                        } catch (err) {
+                            console.error(`Could not play video for "${sign.word}":`, err);
+                            await new Promise(resolve => setTimeout(resolve, 500)); // Pause if play fails
+                        }
+                    } else {
+                        videoEl.src = ''; // Clear video for unfound words
+                        await new Promise(resolve => setTimeout(resolve, 750)); // Pause for unfound words
+                    }
                 }
+                el.signLanguageContainer.innerHTML = '<p>Sign language sequence finished.</p>';
+            } catch (err) {
+                el.signLanguageContainer.innerHTML = `<p style="color: var(--error-color);">${err.message}</p>`;
             }
-            el.signLanguageContainer.innerHTML = '<p>Sign language sequence finished.</p>';
         }
 
         function addHistoryItem(fromRole, fromText, toRole, toText, fromLang, toLang) {
