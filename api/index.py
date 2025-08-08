@@ -79,38 +79,39 @@ async def explain_medication(request: AIRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI model failed: {str(e)}")
 
-# --- NEW: SIGN LANGUAGE FEATURE ENDPOINT ---
+# --- UPDATED: SIGN LANGUAGE FEATURE ENDPOINT ---
 @app.post("/generate-sign-language/")
 async def generate_sign_language(request: APIRequest):
-    """
-    Looks up words in an ASL dictionary API and returns video URLs.
-    This is a prototype and works best for English.
-    """
-    # Sanitize and split text into words, removing punctuation
-    words = ''.join(c for c in request.text if c.isalnum() or c.isspace()).lower().split()
     video_urls = []
-    
-    async with httpx.AsyncClient() as client:
-        for word in words:
-            if not word: continue
-            try:
-                # Using a free, public sign language dictionary API
-                api_url = f"https://sign-language-api.vercel.app/api/v1/signs/search?query={word}"
-                response = await client.get(api_url, timeout=10.0)
-                if response.status_code == 200 and response.json():
-                    # Find a result with a video URL
-                    video_found = False
-                    for sign in response.json():
-                        if sign.get("videos") and sign["videos"][0].get("url"):
-                             video_urls.append({"word": word, "url": sign["videos"][0]["url"]})
-                             video_found = True
-                             break # Use the first video found
-                    if not video_found:
+    try:
+        # NEW: First, translate the incoming text to English, regardless of its original language.
+        translator = Translator()
+        english_text = translator.translate(request.text, dest='en').text
+        
+        # Now, use the English text to search for signs.
+        words = ''.join(c for c in english_text if c.isalnum() or c.isspace()).lower().split()
+        
+        async with httpx.AsyncClient() as client:
+            for word in words:
+                if not word: continue
+                try:
+                    api_url = f"https://sign-language-api.vercel.app/api/v1/signs/search?query={word}"
+                    response = await client.get(api_url, timeout=10.0)
+                    if response.status_code == 200 and response.json():
+                        video_found = False
+                        for sign in response.json():
+                            if sign.get("videos") and sign["videos"][0].get("url"):
+                                 video_urls.append({"word": word, "url": sign["videos"][0]["url"]})
+                                 video_found = True
+                                 break
+                        if not video_found:
+                            video_urls.append({"word": word, "url": None})
+                    else:
                         video_urls.append({"word": word, "url": None})
-                else:
+                except Exception as e:
+                    logging.error(f"Error fetching sign for '{word}': {e}")
                     video_urls.append({"word": word, "url": None})
-            except Exception as e:
-                logging.error(f"Error fetching sign for '{word}': {e}")
-                video_urls.append({"word": word, "url": None})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Translation to English for sign language failed: {str(e)}")
 
     return {"signs": video_urls}
